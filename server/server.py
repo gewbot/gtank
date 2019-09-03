@@ -23,7 +23,28 @@ from mpu6050 import mpu6050
 
 import PID
 
-sensor = mpu6050(0x68)
+OLED_connection = 1
+try:
+    import OLED
+    screen = OLED.OLED_ctrl()
+    screen.start()
+    screen.screen_show(1, 'GEWBOT.COM')
+except:
+    OLED_connection = 0
+    print('OLED disconnected\nOLED没有连接')
+    pass
+
+MPU_connection = 1
+try:
+    sensor = mpu6050(0x68)
+    print('mpu6050 connected, PT MODE ON')
+    if OLED_connection:
+        screen.screen_show(4, 'PT MODE ON')
+except:
+    MPU_connection = 0
+    print('mpu6050 disconnected, ARM MODE ON')
+    if OLED_connection:
+        screen.screen_show(4, 'ARM MODE ON')
 
 servo_speed  = 11
 functionMode = 0
@@ -42,7 +63,7 @@ class Servo_ctrl(threading.Thread):
         self.__running.set()      # 将running设置为True
 
     def run(self):
-        global goal_pos, servo_command, init_get
+        global goal_pos, servo_command, init_get, functionMode
         while self.__running.isSet():
             self.__flag.wait()      # 为True时立即返回, 为False时阻塞直到内部的标识位为True后返回
             if functionMode != 6:
@@ -66,10 +87,17 @@ class Servo_ctrl(threading.Thread):
                     pass
 
             if functionMode == 4:
-                servo.ahead()
-                findline.run()
-                if not functionMode:
-                    move.motorStop()
+                if MPU_connection:
+                    try:
+                        accelerometer_data = sensor.get_accel_data()
+                        Y_get = accelerometer_data['y']
+                        X_get = accelerometer_data['x']
+                        tcpCliSock.send(('OSD %f %f'%(round(Y_get,2),round(X_get,2))).encode())
+                        #print('OSD %f %f'%(round(Y_get,2),round(X_get,2)))
+                        time.sleep(0.1)
+                    except:
+                        print('MPU_6050 I/O ERROR')
+                        pass
             elif functionMode == 5:
                 servo.ahead()
                 dis_get = ultra.checkdist()
@@ -78,37 +106,41 @@ class Servo_ctrl(threading.Thread):
                     move.move(100, 'backward', 'no', 1)
                     move.motorStop()
                     move.move(100, 'no', 'left', 1)
-                    time.sleep(0.2)
+                    time.sleep(1)
                     move.motorStop()
                 else:
                     move.move(100, 'forward', 'no', 1)
                 if not functionMode:
                     move.motorStop()
             elif functionMode == 6:
-                accelerometer_data = sensor.get_accel_data()
-                Y_get = accelerometer_data['y']
-                if not init_get:
-                    goal_pos = Y_get
-                    init_get = 1
-                if servo_command == 'up':
-                    servo.up(servo_speed)
-                    time.sleep(0.2)
+                if MPU_connection:
                     accelerometer_data = sensor.get_accel_data()
                     Y_get = accelerometer_data['y']
-                    goal_pos = Y_get
-                elif servo_command == 'down':
-                    servo.down(servo_speed)
-                    time.sleep(0.2)
-                    accelerometer_data = sensor.get_accel_data()
-                    Y_get = accelerometer_data['y']
-                    goal_pos = Y_get
-                if abs(Y_get-goal_pos)>tor_pos:
-                    if Y_get < goal_pos:
-                        servo.down(int(mpu_speed*abs(Y_get - goal_pos)))
-                    elif Y_get > goal_pos:
-                        servo.up(int(mpu_speed*abs(Y_get - goal_pos)))
-                    time.sleep(0.03)
-                    continue
+                    if not init_get:
+                        goal_pos = Y_get
+                        init_get = 1
+                    if servo_command == 'up':
+                        servo.up(servo_speed)
+                        time.sleep(0.2)
+                        accelerometer_data = sensor.get_accel_data()
+                        Y_get = accelerometer_data['y']
+                        goal_pos = Y_get
+                    elif servo_command == 'down':
+                        servo.down(servo_speed)
+                        time.sleep(0.2)
+                        accelerometer_data = sensor.get_accel_data()
+                        Y_get = accelerometer_data['y']
+                        goal_pos = Y_get
+                    if abs(Y_get-goal_pos)>tor_pos:
+                        if Y_get < goal_pos:
+                            servo.down(int(mpu_speed*abs(Y_get - goal_pos)))
+                        elif Y_get > goal_pos:
+                            servo.up(int(mpu_speed*abs(Y_get - goal_pos)))
+                        time.sleep(0.03)
+                        continue
+                else:
+                    functionMode = 0
+                    servo_move.pause()
 
             time.sleep(0.07)
 
@@ -226,6 +258,8 @@ def run():
 
 
         elif 'function_1_on' in data:
+            if OLED_connection:
+                screen.screen_show(5,'SCANNING')
             servo.ahead()
             time.sleep(0.2)
             tcpCliSock.send(('function_1_on').encode())
@@ -237,29 +271,48 @@ def run():
 
 
         elif 'function_2_on' in data:
+            if OLED_connection:
+                screen.screen_show(5,'FindColor')
             functionMode = 2
             fpv.FindColor(1)
             tcpCliSock.send(('function_2_on').encode())
 
         elif 'function_3_on' in data:
+            if OLED_connection:
+                screen.screen_show(5,'MotionGet')
             functionMode = 3
             fpv.WatchDog(1)
             tcpCliSock.send(('function_3_on').encode())
 
         elif 'function_4_on' in data:
-            functionMode = 4
-            servo_move.resume()
-            tcpCliSock.send(('function_4_on').encode())
+            if MPU_connection:
+                if OLED_connection:
+                    screen.screen_show(5,'ADVANCED OSD')
+                functionMode = 4
+                servo_move.resume()
+                tcpCliSock.send(('function_4_on').encode())
+            else:
+                tcpCliSock.send(('function_4_off').encode())
 
         elif 'function_5_on' in data:
-            functionMode = 5
-            servo_move.resume()
-            tcpCliSock.send(('function_5_on').encode())
+            if MPU_connection:
+                if OLED_connection:
+                    screen.screen_show(5,'Automatic')
+                functionMode = 5
+                servo_move.resume()
+                tcpCliSock.send(('function_5_on').encode())
+            else:
+                tcpCliSock.send(('function_5_off').encode())
 
         elif 'function_6_on' in data:
-            functionMode = 6
-            servo_move.resume()
-            tcpCliSock.send(('function_6_on').encode())
+            if MPU_connection:
+                if OLED_connection:
+                    screen.screen_show(5,'SteadyCamera')
+                functionMode = 6
+                servo_move.resume()
+                tcpCliSock.send(('function_6_on').encode())
+            else:
+                tcpCliSock.send(('function_6_off').encode())
 
 
         #elif 'function_1_off' in data:
@@ -346,6 +399,9 @@ def run():
             except:
                 pass
 
+        if not functionMode:
+            if OLED_connection:
+                screen.screen_show(5,'Functions OFF')
         else:
             pass
 
@@ -359,22 +415,39 @@ def wifi_check():
         ipaddr_check=s.getsockname()[0]
         s.close()
         print(ipaddr_check)
+        if OLED_connection:
+            screen.screen_show(2, 'IP:'+ipaddr_check)
+            screen.screen_show(3, 'AP MODE OFF')
     except:
         ap_threading=threading.Thread(target=ap_thread)   #Define a thread for data receiving
         ap_threading.setDaemon(True)                          #'True' means it is a front thread,it would close when the mainloop() closes
         ap_threading.start()                                  #Thread starts
-
+        if OLED_connection:
+            screen.screen_show(2, 'AP Starting 10%')
         LED.colorWipe(0,16,50)
         time.sleep(1)
+        if OLED_connection:
+            screen.screen_show(2, 'AP Starting 30%')
         LED.colorWipe(0,16,100)
         time.sleep(1)
+        if OLED_connection:
+            screen.screen_show(2, 'AP Starting 50%')
         LED.colorWipe(0,16,150)
         time.sleep(1)
+        if OLED_connection:
+            screen.screen_show(2, 'AP Starting 70%')
         LED.colorWipe(0,16,200)
         time.sleep(1)
+        if OLED_connection:
+            screen.screen_show(2, 'AP Starting 90%')
         LED.colorWipe(0,16,255)
         time.sleep(1)
+        if OLED_connection:
+            screen.screen_show(2, 'AP Starting 100%')
         LED.colorWipe(35,255,35)
+        if OLED_connection:
+            screen.screen_show(2, 'IP:192.168.12.1')
+            screen.screen_show(3, 'AP MODE ON')
 
 
 
@@ -391,7 +464,7 @@ if __name__ == '__main__':
         LED  = LED.LED()
         LED.colorWipe(255,16,0)
     except:
-        print('Use "sudo pip3 install rpi_ws281x" to install WS_281x package')
+        print('Use "sudo pip3 install rpi_ws281x" to install WS_281x package\n使用"sudo pip3 install rpi_ws281x"命令来安装rpi_ws281x')
         pass
 
     while  1:
