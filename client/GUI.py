@@ -21,6 +21,9 @@ try:
 except:
 	print("Couldn't import OpenCV, you need to install it first.")
 
+OSD_X = 0
+OSD_Y = 0
+advanced_OSD = 0
 
 def global_init():
 	global DS_stu, TS_stu, color_bg, color_text, color_btn, color_line, color_can, color_oval, target_color
@@ -73,6 +76,41 @@ def get_FPS():
 		except:
 			time.sleep(1)
 
+def advanced_OSD_add(draw_on, X, Y):
+	error_X = X*10
+	error_Y = Y*6-2
+	#if error_Y > 0:
+	X_s = int(200+120-120*math.cos(math.radians(error_Y)))
+	Y_s = int(240+120*math.sin(math.radians(error_Y))-error_X*3)
+
+	X_e = int(320+120*math.cos(math.radians(error_Y)))
+	Y_e = int(240-120*math.sin(math.radians(error_Y))-error_X*3)
+	cv2.line(draw_on,(X_s,Y_s),(X_e,Y_e),(0,255,0),2)
+	cv2.putText(draw_on,('horizontal line'),(X_e+10,Y_e), font, 0.5,(0,255,0),1,cv2.LINE_AA)
+
+	cv2.line(draw_on,(X_s,Y_s+270),(X_e,Y_e+270),(0,255,0),2)
+	cv2.putText(draw_on,('Down'),(X_e+10,Y_e+270), font, 0.5,(0,255,0),1,cv2.LINE_AA)
+
+	cv2.line(draw_on,(X_s,Y_s-270),(X_e,Y_e-270),(0,255,0),2)
+	cv2.putText(draw_on,('Up'),(X_e+10,Y_e-270), font, 0.5,(0,255,0),1,cv2.LINE_AA)
+
+	X_s_short = int(260+60-60*math.cos(math.radians(error_Y)))
+	Y_s_short = int(240+60*math.sin(math.radians(error_Y))-error_X*3)
+
+	X_e_short = int(320+60*math.cos(math.radians(error_Y)))
+	Y_e_short = int(240-60*math.sin(math.radians(error_Y))-error_X*3)
+
+	cv2.line(draw_on,(X_s_short,Y_s_short+90),(X_e_short,Y_e_short+90),(0,255,0))
+	cv2.line(draw_on,(X_s_short,Y_s_short+180),(X_e_short,Y_e_short+180),(0,255,0))
+	cv2.line(draw_on,(X_s_short,Y_s_short+360),(X_e_short,Y_e_short+360),(0,255,0))
+	cv2.line(draw_on,(X_s_short,Y_s_short+450),(X_e_short,Y_e_short+450),(0,255,0))
+
+	cv2.line(draw_on,(X_s_short,Y_s_short-90),(X_e_short,Y_e_short-90),(0,255,0))
+	cv2.line(draw_on,(X_s_short,Y_s_short-180),(X_e_short,Y_e_short-180),(0,255,0))
+	cv2.line(draw_on,(X_s_short,Y_s_short-360),(X_e_short,Y_e_short-360),(0,255,0))
+	cv2.line(draw_on,(X_s_short,Y_s_short-450),(X_e_short,Y_e_short-450),(0,255,0))
+
+
 def opencv_r():
 	global frame_num
 	while True:
@@ -104,6 +142,9 @@ def opencv_r():
 				#cv2.putText(source,('%sm'%ultra_data),(210,290), font, 0.5,(255,255,255),1,cv2.LINE_AA)
 			except:
 				pass
+
+			if advanced_OSD:
+				advanced_OSD_add(source, OSD_X, OSD_Y)
 			
 			#cv2.putText(source,('%sm'%ultra_data),(210,290), font, 0.5,(255,255,255),1,cv2.LINE_AA)
 			cv2.imshow("Stream", source)
@@ -149,7 +190,7 @@ def num_import(initial):			#Call this function to import data from '.txt' file
 
 
 def connection_thread():
-	global Switch_3, Switch_2, Switch_1, function_stu
+	global Switch_3, Switch_2, Switch_1, function_stu, OSD_X, OSD_Y, OSD_info, advanced_OSD
 	while 1:
 		car_info = (tcpClicSock.recv(BUFSIZ)).decode()
 		if not car_info:
@@ -198,6 +239,7 @@ def connection_thread():
 		elif 'function_4_on' in car_info:
 			function_stu = 1
 			Btn_function_4.config(bg='#4CAF50')
+			advanced_OSD = 1
 
 		elif 'function_5_on' in car_info:
 			function_stu = 1
@@ -206,6 +248,7 @@ def connection_thread():
 		elif 'function_6_on' in car_info:
 			function_stu = 1
 			Btn_function_6.config(bg='#4CAF50')
+			advanced_OSD = 1
 
 		elif 'function_1_off' in car_info:
 			function_stu = 0
@@ -222,6 +265,7 @@ def connection_thread():
 		elif 'function_4_off' in car_info:
 			function_stu = 0
 			Btn_function_4.config(bg=color_btn)
+			advanced_OSD = 0
 
 		elif 'function_5_off' in car_info:
 			function_stu = 0
@@ -230,6 +274,15 @@ def connection_thread():
 		elif 'function_6_off' in car_info:
 			function_stu = 0
 			Btn_function_6.config(bg=color_btn)
+			advanced_OSD = 0
+
+		elif 'OSD' in car_info:
+			OSD_info = car_info.split()
+			try:
+				OSD_X = float(OSD_info[1])
+				OSD_Y = float(OSD_info[2])
+			except:
+				pass
 
 
 def Info_receive():
@@ -707,7 +760,7 @@ def function_buttons(x,y):
 	Btn_function_1 = tk.Button(root, width=8, text='RadarScan',fg=color_text,bg=color_btn,relief='ridge')
 	Btn_function_2 = tk.Button(root, width=8, text='FindColor',fg=color_text,bg=color_btn,relief='ridge')
 	Btn_function_3 = tk.Button(root, width=8, text='MotionGet',fg=color_text,bg=color_btn,relief='ridge')
-	Btn_function_4 = tk.Button(root, width=8, text='LineTrack',fg=color_text,bg=color_btn,relief='ridge')
+	Btn_function_4 = tk.Button(root, width=8, text='OSDscreen',fg=color_text,bg=color_btn,relief='ridge')
 	Btn_function_5 = tk.Button(root, width=8, text='Automatic',fg=color_text,bg=color_btn,relief='ridge')
 	Btn_function_6 = tk.Button(root, width=8, text='SteadyCam',fg=color_text,bg=color_btn,relief='ridge')
 	Btn_function_7 = tk.Button(root, width=8, text='Instruction',fg=color_text,bg=color_btn,relief='ridge')
