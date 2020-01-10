@@ -15,6 +15,7 @@ import os
 import FPV
 import info
 import servo
+
 import LED
 import findline
 import switch
@@ -399,6 +400,66 @@ def run():
             except:
                 pass
 
+        elif 'CVFL' in data:
+            if not FPV.FindLineMode:
+                FPV.FindLineMode = 1
+                tcpCliSock.send(('CVFL_on').encode())
+            else:
+                move.motorStop()
+                # FPV.cvFindLineOff()
+                FPV.FindLineMode = 0
+                tcpCliSock.send(('CVFL_off').encode())
+
+        elif 'Render' in data:
+            if FPV.frameRender:
+                FPV.frameRender = 0
+            else:
+                FPV.frameRender = 1
+
+        elif 'WBswitch' in data:
+            if FPV.lineColorSet == 255:
+                FPV.lineColorSet = 0
+            else:
+                FPV.lineColorSet = 255
+
+        elif 'lip1' in data:
+            try:
+                set_lip1=data.split()
+                lip1_set = int(set_lip1[1])
+                FPV.linePos_1 = lip1_set
+            except:
+                pass
+
+        elif 'lip2' in data:
+            try:
+                set_lip2=data.split()
+                lip2_set = int(set_lip2[1])
+                FPV.linePos_2 = lip2_set
+            except:
+                pass
+
+        elif 'err' in data:
+            try:
+                set_err=data.split()
+                err_set = int(set_err[1])
+                FPV.findLineError = err_set
+            except:
+                pass
+
+        elif 'FCSET' in data:#1
+            FCSET = data.split()
+            fpv.colorFindSet(int(FCSET[1]), int(FCSET[2]), int(FCSET[3]))
+
+        elif 'setEC' in data:#Z
+            ECset = data.split()
+            try:
+                fpv.setExpCom(int(ECset[1]))
+            except:
+                pass
+
+        elif 'defEC' in data:#Z
+            fpv.defaultExpCom()
+
         if not functionMode:
             if OLED_connection:
                 screen.screen_show(5,'Functions OFF')
@@ -490,10 +551,10 @@ if __name__ == '__main__':
             LED.colorWipe(0,80,255)
         except:
             pass
-        run()
     try:
         run()
-    except:
+    except Exception as e:
+        print(e)
         servo_move.stop()
         LED.colorWipe(0,0,0)
         servo.clean_all()
